@@ -1,8 +1,10 @@
+mod clicker;
 mod gui;
-mod key;
-mod gui_logic;
+mod sound;
+mod windows;
+use crate::gui::gui_view;
 
 fn main() {
     env_logger::init();
-    gui::run();
+    gui_view::run();
 }

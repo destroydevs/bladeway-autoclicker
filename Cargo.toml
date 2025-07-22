@@ -5,10 +5,11 @@ edition = "2024"
 
 [dependencies]
 env_logger = "0.11.8"
-iced = "0.13.1"
+iced = { version = "0.13.1", features = ["tokio"]}
 lazy_static = "1.5.0"
 log = "0.4.27"
 mouse-rs = "0.4.2"
+rodio = "0.21.1"
 tokio = "1.46.1"
 windows = { version = "0.61.3", features = [
     "Win32_UI_Input_KeyboardAndMouse",

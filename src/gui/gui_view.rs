@@ -4,9 +4,13 @@ use iced::{
     widget::{button, center, column, row, text_input},
 };
 
-use crate::gui_logic::Gui;
-use crate::gui_logic::Message;
-use crate::gui_logic::GuiLogic;
+use iced::time::Duration;
+
+use crate::gui::gui_logic::Gui;
+use crate::gui::gui_logic::GuiLogic;
+use crate::gui::gui_logic::Message;
+
+use iced::Subscription;
 
 pub fn run() {
     let settings = iced::Settings {
@@ -14,6 +18,7 @@ pub fn run() {
     };
 
     let app = iced::application("BladeWay AutoClicker", Gui::update, Gui::view)
+        .subscription(Gui::subscription)
         .settings(settings)
         .theme(|_| Theme::Dracula)
         .window_size(iced::Size::new(600., 300.));
@@ -56,5 +61,9 @@ impl Gui {
         iced::widget::column![center(centered_column), copyright,]
             .padding(10)
             .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        iced::time::every(Duration::from_millis(100)).map(|_| Message::Tick)
     }
 }

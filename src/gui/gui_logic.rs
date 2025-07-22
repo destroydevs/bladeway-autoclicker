@@ -1,18 +1,21 @@
-use std::time::Duration;
-use crate::key;
+use crate::sound::sound_util;
+use crate::windows::key;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
-use std::thread::JoinHandle;
 use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::thread::JoinHandle;
 
 pub trait GuiLogic {
     fn update(&mut self, message: Message);
     fn check_callback(&mut self);
     fn show_error(&mut self, error: String);
     fn disable_clicker(&mut self);
+    fn enable_clicker(&mut self);
 }
 
 pub struct Gui {
@@ -21,7 +24,7 @@ pub struct Gui {
     pub name: String,
     pub error: Option<String>,
     pub mpsc: (Sender<GuiUpdate>, Receiver<GuiUpdate>),
-    pub clicker_state: bool,
+    pub click_counter: AtomicUsize,
     pub thread: Option<JoinHandle<()>>,
 }
 
@@ -47,7 +50,7 @@ impl Default for Gui {
             name: AppState::default().disabled,
             error: None,
             mpsc: mpsc::channel::<GuiUpdate>(),
-            clicker_state: false,
+            click_counter: AtomicUsize::new(0),
             thread: None,
         }
     }
@@ -58,6 +61,7 @@ pub enum Message {
     Run,
     Apply(String),
     Input(String),
+    Tick,
 }
 
 #[derive(Debug, Clone)]
@@ -72,26 +76,11 @@ impl GuiLogic for Gui {
         match message {
             Message::Run => {
                 if !self.is_running {
-                    let inp = Arc::new(self.input.clone());
-                    let sender = self.mpsc.0.clone();
-                    let error_sender = sender.clone();
-                    self.thread = Some(thread::spawn(move || {
-                        if let Err(e) = key::register_key(&inp, move || {
-                            log::info!("Clicking");
-                            let _ = sender.send(GuiUpdate::ClickerStateChange);
-                        }) {
-                            let _ = error_sender.send(GuiUpdate::ErrorOccurred(e.to_string()));
-                        };
-                    }));
-
-                    self.name = AppState::default().enabled;
-                    self.is_running = true;
+                    self.enable_clicker();
                 } else {
                     self.disable_clicker();
                 }
-
-                self.check_callback();
-            }
+            },
             Message::Apply(s) => {
                 self.input = s;
 
@@ -104,7 +93,7 @@ impl GuiLogic for Gui {
                         self.show_error(format!("Невозможно распознать клавишу - {}", key));
                     }
                 }
-            }
+            },
             Message::Input(s) => {
                 if s.len() > 1 {
                     return;
@@ -113,13 +102,15 @@ impl GuiLogic for Gui {
                 if !self.is_running {
                     self.input = s.to_uppercase();
                 }
+            },
+            Message::Tick => {
+                self.check_callback();
             }
         }
 
         self.check_callback();
     }
 
-    
     fn disable_clicker(&mut self) {
         key::HookKey::unregister();
         self.name = AppState::default().disabled;
@@ -129,13 +120,37 @@ impl GuiLogic for Gui {
                 let _ = handle.join();
             }
         }
+
+        sound_util::play_orb_sound();
+    }
+
+    fn enable_clicker(&mut self) {
+        let inp = Arc::new(self.input.clone());
+        let sender = self.mpsc.0.clone();
+        let error_sender = sender.clone();
+        self.thread = Some(thread::spawn(move || {
+            if let Err(e) = key::register_key(&inp, move || {
+
+                let _ = sender.send(GuiUpdate::ClickerStateChange);
+                
+            }) {
+
+                let _ = error_sender.send(GuiUpdate::ErrorOccurred(e.to_string()));
+
+            };
+        }));
+
+        self.name = AppState::default().enabled;
+        self.is_running = true;
+
+        sound_util::play_orb_sound();
     }
 
     fn show_error(&mut self, error: String) {
         self.error = Some(error);
-        
+
         let sender = self.mpsc.0.clone();
-        
+
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(1));
             let _ = sender.send(GuiUpdate::ClearError);
@@ -161,15 +176,14 @@ impl GuiLogic for Gui {
                     }
 
                     key::HookKey::unregister();
-                },
+                }
                 GuiUpdate::ClickerStateChange => {
-                    if self.clicker_state {
+                    if self.click_counter.load(std::sync::atomic::Ordering::Relaxed) >= 1 {
                         self.disable_clicker();
-                        std::process::exit(1);
                     } else {
-                        self.clicker_state = true;
+                        self.click_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
-                },
+                }
                 GuiUpdate::ClearError => {
                     self.error = None;
                 }
