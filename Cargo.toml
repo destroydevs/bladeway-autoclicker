@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 env_logger = "0.11.8"
-iced = { version = "0.13.1", features = ["tokio"]}
+iced = { version = "0.13.1", features = ["tokio", "image"]}
+image = "0.25.6"
 lazy_static = "1.5.0"
 log = "0.4.27"
 mouse-rs = "0.4.2"

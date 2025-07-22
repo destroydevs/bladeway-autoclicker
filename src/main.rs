@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod clicker;
 mod gui;
 mod sound;

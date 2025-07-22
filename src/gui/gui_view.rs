@@ -4,15 +4,24 @@ use iced::{
     widget::{button, center, column, row, text_input},
 };
 
-use iced::time::Duration;
-
 use crate::gui::gui_logic::Gui;
 use crate::gui::gui_logic::GuiLogic;
 use crate::gui::gui_logic::Message;
 
 use iced::Subscription;
 
+static ICON: &[u8] = include_bytes!("../.././icon.ico");
+
 pub fn run() {
+    let image = image::load_from_memory(ICON).unwrap();
+    let (width, height) = (image.width(), image.height());
+    let icon = iced::window::icon::from_rgba(image.to_rgba8().into_raw(), width, height).unwrap();
+
+    let window_settings = iced::window::Settings {
+        icon: Some(icon),
+        ..Default::default()
+    };
+
     let settings = iced::Settings {
         ..Default::default()
     };
@@ -21,6 +30,7 @@ pub fn run() {
         .subscription(Gui::subscription)
         .settings(settings)
         .theme(|_| Theme::Dracula)
+        .window(window_settings)
         .window_size(iced::Size::new(600., 300.));
 
     let _ = app.run();
@@ -64,6 +74,6 @@ impl Gui {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        iced::time::every(Duration::from_millis(100)).map(|_| Message::Tick)
+        iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
     }
 }

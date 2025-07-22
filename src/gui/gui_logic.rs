@@ -151,14 +151,16 @@ impl GuiLogic for Gui {
         let sender2 = sender.clone();
         let error_sender = sender.clone();
 
-        if let Err(e) = key::register_keys(&inp, move || {
-            let _ = sender.send(GuiUpdate::ClickerActivation);
-            let _ = sender.send(GuiUpdate::ClickerStateChange);
-        }, move || {
-
-            let _ = sender2.send(GuiUpdate::DisableClicker);
-
-        }) {
+        if let Err(e) = key::register_keys(
+            &inp,
+            move || {
+                let _ = sender.send(GuiUpdate::ClickerActivation);
+                let _ = sender.send(GuiUpdate::ClickerStateChange);
+            },
+            move || {
+                let _ = sender2.send(GuiUpdate::DisableClicker);
+            },
+        ) {
             let _ = error_sender.send(GuiUpdate::ErrorOccurred(e.to_string()));
         };
 
@@ -223,7 +225,7 @@ impl GuiLogic for Gui {
                 }
                 GuiUpdate::ClearError => {
                     self.error = None;
-                },
+                }
                 GuiUpdate::DisableClicker => {
                     if self.clicker_enabled {
                         self.disable_clicker();

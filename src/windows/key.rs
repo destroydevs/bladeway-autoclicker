@@ -1,11 +1,9 @@
 use std::sync::Mutex;
-use windows::{
-    Win32::Foundation::*, 
-    Win32::System::LibraryLoader::GetModuleHandleW,
-    Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, 
-    Win32::UI::WindowsAndMessaging::*,
-};
 use std::thread;
+use windows::{
+    Win32::Foundation::*, Win32::System::LibraryLoader::GetModuleHandleW,
+    Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, Win32::UI::WindowsAndMessaging::*,
+};
 
 struct HookState {
     special_key: VIRTUAL_KEY,
@@ -87,9 +85,9 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
             if let Some(state) = &*HOOK_STATE.lock().unwrap() {
                 let kb = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
                 let vk_code = kb.vkCode;
-                
+
                 let is_alpha = vk_code >= 0x41 && vk_code <= 0x5A;
-                
+
                 if vk_code == state.special_key.0 as u32 {
                     (state.special_callback)();
                 } else if is_alpha {
