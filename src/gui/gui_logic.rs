@@ -1,7 +1,9 @@
+use crate::clicker;
+use crate::clicker::Clicker;
 use crate::sound::sound_util;
 use crate::windows::key;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use std::thread;
 use std::time::Duration;
 
@@ -26,6 +28,8 @@ pub struct Gui {
     pub mpsc: (Sender<GuiUpdate>, Receiver<GuiUpdate>),
     pub click_counter: AtomicUsize,
     pub thread: Option<JoinHandle<()>>,
+    pub clicker: Clicker,
+    pub clicker_enabled: bool,
 }
 
 pub struct AppState {
@@ -44,6 +48,7 @@ impl Default for AppState {
 
 impl Default for Gui {
     fn default() -> Self {
+        let point = clicker::get_cursor_position();
         Self {
             input: "R".to_string(),
             is_running: false,
@@ -52,6 +57,8 @@ impl Default for Gui {
             mpsc: mpsc::channel::<GuiUpdate>(),
             click_counter: AtomicUsize::new(0),
             thread: None,
+            clicker: Clicker::new(point, 250),
+            clicker_enabled: false,
         }
     }
 }
@@ -69,6 +76,7 @@ pub enum GuiUpdate {
     ErrorOccurred(String),
     ClickerStateChange,
     ClearError,
+    ClickerActivation,
 }
 
 impl GuiLogic for Gui {
@@ -80,7 +88,7 @@ impl GuiLogic for Gui {
                 } else {
                     self.disable_clicker();
                 }
-            },
+            }
             Message::Apply(s) => {
                 self.input = s;
 
@@ -93,7 +101,7 @@ impl GuiLogic for Gui {
                         self.show_error(format!("Невозможно распознать клавишу - {}", key));
                     }
                 }
-            },
+            }
             Message::Input(s) => {
                 if s.len() > 1 {
                     return;
@@ -102,7 +110,7 @@ impl GuiLogic for Gui {
                 if !self.is_running {
                     self.input = s.to_uppercase();
                 }
-            },
+            }
             Message::Tick => {
                 self.check_callback();
             }
@@ -112,14 +120,26 @@ impl GuiLogic for Gui {
     }
 
     fn disable_clicker(&mut self) {
-        key::HookKey::unregister();
         self.name = AppState::default().disabled;
         self.is_running = false;
+
+        self.clicker.stop();
+
+        self.click_counter
+            .store(0, std::sync::atomic::Ordering::SeqCst);
+
+        self.clicker_enabled = false;
+
+        key::HookKey::unregister();
         if let Some(handle) = self.thread.take() {
             if handle.is_finished() {
                 let _ = handle.join();
+            } else {
+                drop(handle);
             }
         }
+
+        self.mpsc = mpsc::channel::<GuiUpdate>();
 
         sound_util::play_orb_sound();
     }
@@ -128,17 +148,13 @@ impl GuiLogic for Gui {
         let inp = Arc::new(self.input.clone());
         let sender = self.mpsc.0.clone();
         let error_sender = sender.clone();
-        self.thread = Some(thread::spawn(move || {
-            if let Err(e) = key::register_key(&inp, move || {
 
-                let _ = sender.send(GuiUpdate::ClickerStateChange);
-                
-            }) {
-
-                let _ = error_sender.send(GuiUpdate::ErrorOccurred(e.to_string()));
-
-            };
-        }));
+        if let Err(e) = key::register_key(&inp, move || {
+            let _ = sender.send(GuiUpdate::ClickerActivation);
+            let _ = sender.send(GuiUpdate::ClickerStateChange);
+        }) {
+            let _ = error_sender.send(GuiUpdate::ErrorOccurred(e.to_string()));
+        };
 
         self.name = AppState::default().enabled;
         self.is_running = true;
@@ -177,11 +193,26 @@ impl GuiLogic for Gui {
 
                     key::HookKey::unregister();
                 }
+                GuiUpdate::ClickerActivation => {
+                    if !self.clicker_enabled {
+                        self.clicker
+                            .set_other_position(clicker::get_cursor_position());
+
+                        self.clicker.run();
+
+                        self.clicker_enabled = true;
+                    } else {
+                        self.clicker.stop();
+
+                        self.clicker_enabled = false;
+                    }
+                }
                 GuiUpdate::ClickerStateChange => {
-                    if self.click_counter.load(std::sync::atomic::Ordering::Relaxed) >= 1 {
+                    if self.click_counter.load(std::sync::atomic::Ordering::SeqCst) >= 1 {
                         self.disable_clicker();
                     } else {
-                        self.click_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        self.click_counter
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     }
                 }
                 GuiUpdate::ClearError => {

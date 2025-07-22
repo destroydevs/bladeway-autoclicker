@@ -7,7 +7,10 @@ use std::{
     time::Duration,
 };
 
-use mouse_rs::{Mouse, types::keys::Keys};
+use mouse_rs::{
+    Mouse,
+    types::{Point, keys::Keys},
+};
 
 pub struct Clicker {
     position: (i32, i32),
@@ -27,17 +30,6 @@ impl Default for Clicker {
     }
 }
 
-pub struct Point {
-    x: i32,
-    y: i32,
-}
-
-impl Point {
-    pub fn from(x: i32, y: i32) -> Self {
-        Point { x, y }
-    }
-}
-
 impl Clicker {
     pub fn new(point: Point, speed: u32) -> Self {
         Clicker {
@@ -45,6 +37,10 @@ impl Clicker {
             speed,
             ..Default::default()
         }
+    }
+
+    pub fn set_other_position(&mut self, point: Point) {
+        self.position = (point.x, point.y);
     }
 
     pub fn run(&self) {
@@ -55,21 +51,23 @@ impl Clicker {
         self.enabled.store(true, Ordering::SeqCst);
 
         let mouse = Arc::clone(&self.mouse);
-        let enabled = Arc::clone(&self.enabled);
+        let click_enabled = Arc::clone(&self.enabled);
+        let move_enabled = Arc::clone(&self.enabled);
         let position = self.position;
         let mouse_click = Arc::clone(&self.mouse);
         let speed_click = self.speed;
-        thread::spawn( move ||{
-             thread::sleep(Duration::from_millis(speed_click as u64));
+        thread::spawn(move || {
+            while click_enabled.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(speed_click as u64));
 
-            let _ = mouse_click.click(&Keys::LEFT);
+                let _ = mouse_click.click(&Keys::LEFT);
+            }
         });
 
-       thread::spawn(move || {
-            while enabled.load(Ordering::SeqCst) {
+        thread::spawn(move || {
+            while move_enabled.load(Ordering::SeqCst) {
                 let _ = mouse.move_to(position.0, position.1);
                 thread::sleep(Duration::from_millis(10));
-
             }
         });
     }
@@ -83,3 +81,7 @@ impl Clicker {
     }
 }
 
+pub fn get_cursor_position() -> Point {
+    let mouse = Mouse::new();
+    mouse.get_position().unwrap_or(Point { x: 0, y: 0 })
+}

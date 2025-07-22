@@ -4,6 +4,8 @@ use windows::{
     Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, Win32::UI::WindowsAndMessaging::*,
 };
 
+use std::thread;
+
 struct HookState {
     key: VIRTUAL_KEY,
     callback: Box<dyn Fn() + Send + 'static>,
@@ -70,7 +72,8 @@ impl HookKey {
             }
         });
 
-        *HOOK_STATE.lock().unwrap() = None;
+        let mut state = HOOK_STATE.lock().unwrap();
+        *state = None;
     }
 }
 
@@ -85,7 +88,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
             }
         }
     }
-    unsafe { CallNextHookEx(Some(HHOOK(std::ptr::null_mut())), code, wparam, lparam) }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
 pub fn register_key<F>(key: &str, func: F) -> Result<(), String>
@@ -93,17 +96,19 @@ where
     F: Fn() + Send + 'static,
 {
     if let Some(vk) = HookKey::from_str(key) {
-        HookKey::hook(vk, func).unwrap();
-
-        let mut msg = MSG::default();
-        unsafe {
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-        }
+        HookKey::hook(vk, func).map_err(|e| e.to_string())?;
         Ok(())
     } else {
         Err(format!("Невозможно распознать клавишу - {}", key))
     }
+}
+
+pub fn run_message_loop() {
+    thread::spawn(|| unsafe {
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    });
 }
