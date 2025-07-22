@@ -1,20 +1,12 @@
-use std::{sync::mpsc, thread::JoinHandle};
-
 use iced::{
     Alignment::Center,
     Color, Element, Theme,
-    futures::lock::Mutex,
     widget::{button, center, column, row, text_input},
 };
-use iced::Subscription;
 
-use std::sync::Arc;
-use std::thread;
-
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
-
-use crate::key;
+use crate::gui_logic::Gui;
+use crate::gui_logic::Message;
+use crate::gui_logic::GuiLogic;
 
 pub fn run() {
     let settings = iced::Settings {
@@ -27,58 +19,6 @@ pub fn run() {
         .window_size(iced::Size::new(600., 300.));
 
     let _ = app.run();
-}
-
-struct Gui {
-    input: String,
-    is_running: bool,
-    name: String,
-    error: Option<String>,
-    mpsc: (Sender<GuiUpdate>, Receiver<GuiUpdate>),
-    clicker_state: bool,
-    thread: Option<JoinHandle<()>>,
-}
-
-struct AppState {
-    enabled: String,
-    disabled: String,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            enabled: "Остановить".to_string(),
-            disabled: "Включить".to_string(),
-        }
-    }
-}
-
-impl Default for Gui {
-    fn default() -> Self {
-        Self {
-            input: "R".to_string(),
-            is_running: false,
-            name: AppState::default().disabled,
-            error: None,
-            mpsc: mpsc::channel::<GuiUpdate>(),
-            clicker_state: false,
-            thread: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-enum GuiUpdate {
-    ErrorOccurred(String),
-    ClickerStateChange,
-    ClearError,
-}
-
-#[derive(Debug, Clone)]
-enum Message {
-    Run,
-    Apply(String),
-    Input(String),
 }
 
 impl Gui {
