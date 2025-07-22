@@ -12,6 +12,8 @@ use mouse_rs::{
     types::{Point, keys::Keys},
 };
 
+use crate::windows::mouse_util;
+
 pub struct Clicker {
     position: (i32, i32),
     speed: u32,
@@ -50,10 +52,7 @@ impl Clicker {
 
         self.enabled.store(true, Ordering::SeqCst);
 
-        let mouse = Arc::clone(&self.mouse);
         let click_enabled = Arc::clone(&self.enabled);
-        let move_enabled = Arc::clone(&self.enabled);
-        let position = self.position;
         let mouse_click = Arc::clone(&self.mouse);
         let speed_click = self.speed;
         thread::spawn(move || {
@@ -64,12 +63,7 @@ impl Clicker {
             }
         });
 
-        thread::spawn(move || {
-            while move_enabled.load(Ordering::SeqCst) {
-                let _ = mouse.move_to(position.0, position.1);
-                thread::sleep(Duration::from_millis(10));
-            }
-        });
+        self.disable_movement();
     }
 
     pub fn stop(&self) {
@@ -77,7 +71,17 @@ impl Clicker {
             return;
         }
 
+        self.enable_movement();
+
         self.enabled.store(false, Ordering::SeqCst);
+    }
+
+    pub fn disable_movement(&self) {
+        mouse_util::block_mouse();
+    }
+
+    pub fn enable_movement(&self) {
+        mouse_util::unblock_mouse();
     }
 }
 

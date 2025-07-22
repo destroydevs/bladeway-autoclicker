@@ -1,14 +1,16 @@
 use std::sync::Mutex;
 use windows::{
-    Win32::Foundation::*, Win32::System::LibraryLoader::GetModuleHandleW,
-    Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, Win32::UI::WindowsAndMessaging::*,
+    Win32::Foundation::*, 
+    Win32::System::LibraryLoader::GetModuleHandleW,
+    Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY, 
+    Win32::UI::WindowsAndMessaging::*,
 };
-
 use std::thread;
 
 struct HookState {
-    key: VIRTUAL_KEY,
-    callback: Box<dyn Fn() + Send + 'static>,
+    special_key: VIRTUAL_KEY,
+    special_callback: Box<dyn Fn() + Send + 'static>,
+    other_keys_callback: Box<dyn Fn() + Send + 'static>,
 }
 
 static HOOK_STATE: Mutex<Option<HookState>> = Mutex::new(None);
@@ -30,21 +32,23 @@ impl HookKey {
             return Some(VIRTUAL_KEY(c as u16 - 'A' as u16 + 0x41));
         }
 
-        if c.is_ascii_digit() {
-            return Some(VIRTUAL_KEY(c as u16));
-        }
-
         None
     }
 
-    pub fn hook<F>(key: VIRTUAL_KEY, callback: F) -> windows::core::Result<()>
+    pub fn hook<F1, F2>(
+        special_key: VIRTUAL_KEY,
+        special_callback: F1,
+        other_keys_callback: F2,
+    ) -> windows::core::Result<()>
     where
-        F: Fn() + Send + 'static,
+        F1: Fn() + Send + 'static,
+        F2: Fn() + Send + 'static,
     {
         let mut state = HOOK_STATE.lock().unwrap();
         *state = Some(HookState {
-            key,
-            callback: Box::new(callback),
+            special_key,
+            special_callback: Box::new(special_callback),
+            other_keys_callback: Box::new(other_keys_callback),
         });
 
         unsafe {
@@ -82,8 +86,14 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
         if wparam.0 == WM_KEYDOWN as usize {
             if let Some(state) = &*HOOK_STATE.lock().unwrap() {
                 let kb = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
-                if kb.vkCode == state.key.0 as u32 {
-                    (state.callback)();
+                let vk_code = kb.vkCode;
+                
+                let is_alpha = vk_code >= 0x41 && vk_code <= 0x5A;
+                
+                if vk_code == state.special_key.0 as u32 {
+                    (state.special_callback)();
+                } else if is_alpha {
+                    (state.other_keys_callback)();
                 }
             }
         }
@@ -91,15 +101,20 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
-pub fn register_key<F>(key: &str, func: F) -> Result<(), String>
+pub fn register_keys<F1, F2>(
+    special_key: &str,
+    special_func: F1,
+    other_keys_func: F2,
+) -> Result<(), String>
 where
-    F: Fn() + Send + 'static,
+    F1: Fn() + Send + 'static,
+    F2: Fn() + Send + 'static,
 {
-    if let Some(vk) = HookKey::from_str(key) {
-        HookKey::hook(vk, func).map_err(|e| e.to_string())?;
+    if let Some(vk) = HookKey::from_str(special_key) {
+        HookKey::hook(vk, special_func, other_keys_func).map_err(|e| e.to_string())?;
         Ok(())
     } else {
-        Err(format!("Невозможно распознать клавишу - {}", key))
+        Err(format!("Невозможно распознать клавишу - {}", special_key))
     }
 }
 
